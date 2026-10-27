@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from datetime import datetime
-import os
 
 st.set_page_config(page_title="Safe Acca AI", page_icon="⚽", layout="centered")
 
@@ -39,12 +38,13 @@ headers = {"x-apisports-key": API_KEY}
 
 SMARTLINK = "https://asiafilm.org/4/bd80344d93bc26083f8b20a55302a626"
 
-# Strong leagues get higher safety score
-TOP_LEAGUES = [
-    "Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1",
-    "UEFA Champions League", "UEFA Europa League", "Championship",
-    "Eredivisie", "Primeira Liga", "Belgian Pro League", "Scottish Premiership"
-]
+# Strong leagues
+TOP_LEAGUES = ["premier league", "la liga", "serie a", "bundesliga", "ligue 1",
+               "champions league", "europa league", "championship", "eredivisie",
+               "primeira liga", "belgian", "scottish", "super lig"]
+
+# Leagues that usually have more goals
+HIGH_SCORING = ["bundesliga", "eredivisie", "liga mx", "a-league", "mls"]
 
 st.title("⚽ Safe Acca AI")
 st.markdown("### Safest Football Accumulator for Today")
@@ -60,7 +60,7 @@ with col2:
     max_legs = st.number_input("📊 Max Legs", min_value=3, max_value=18, value=10)
 
 if st.button("Generate Safest Accumulator"):
-    with st.spinner("Analyzing today's matches for safest picks..."):
+    with st.spinner("Analyzing matches and choosing best market for each..."):
         today = datetime.utcnow().strftime("%Y-%m-%d")
         url = "https://v3.football.api-sports.io/fixtures"
         params = {"date": today}
@@ -77,7 +77,7 @@ if st.button("Generate Safest Accumulator"):
                 if not fixtures:
                     st.warning("No matches found or daily limit reached.")
                 else:
-                    scored_matches = []
+                    scored = []
                     
                     for f in fixtures:
                         if f["fixture"]["status"]["short"] not in ["NS", "TBD"]:
@@ -86,46 +86,55 @@ if st.button("Generate Safest Accumulator"):
                         home = f["teams"]["home"]["name"]
                         away = f["teams"]["away"]["name"]
                         league = f["league"]["name"]
+                        league_lower = league.lower()
                         
-                        # Safety score system
-                        safety = 40  # base score
+                        # Calculate safety score
+                        safety = 45
                         
                         # Bonus for top leagues
-                        for top in TOP_LEAGUES:
-                            if top.lower() in league.lower():
-                                safety += 30
-                                break
+                        is_top = any(top in league_lower for top in TOP_LEAGUES)
+                        if is_top:
+                            safety += 25
                         
-                        # Prefer home teams
-                        safety += 15
+                        # Home advantage
+                        safety += 12
                         
-                        # Decide market based on safety
-                        if safety >= 70:
+                        # Decide the BEST market for this specific match
+                        if is_top:
                             pick = "Home Win"
-                            odds = 1.40
-                        elif safety >= 55:
+                            odds = 1.42
+                            reason = "Strong league + Home advantage"
+                        elif any(h in league_lower for h in HIGH_SCORING):
                             pick = "Over 1.5 Goals"
-                            odds = 1.30
+                            odds = 1.28
+                            reason = "High-scoring league"
                         else:
                             pick = "BTTS - No"
-                            odds = 1.55
+                            odds = 1.50
+                            reason = "Tighter match expected"
                         
-                        scored_matches.append({
+                        # Small extra variation
+                        if "cup" in league_lower or "trophy" in league_lower:
+                            pick = "Double Chance 1X"
+                            odds = 1.30
+                            reason = "Cup match - safer with Double Chance"
+                        
+                        scored.append({
                             "match": f"{home} vs {away}",
                             "league": league,
                             "pick": pick,
                             "odds": odds,
-                            "safety": safety
+                            "safety": safety,
+                            "reason": reason
                         })
                     
-                    # Sort by highest safety first
-                    scored_matches.sort(key=lambda x: x["safety"], reverse=True)
+                    # Sort by safety (best first)
+                    scored.sort(key=lambda x: x["safety"], reverse=True)
                     
-                    # Build the accumulator
                     selected = []
                     total = 1.0
                     
-                    for m in scored_matches:
+                    for m in scored:
                         if len(selected) >= max_legs:
                             break
                         selected.append(m)
@@ -133,7 +142,7 @@ if st.button("Generate Safest Accumulator"):
                         if total >= target_odds:
                             break
                     
-                    st.success(f"Analyzed {len(fixtures)} matches • Selected safest ones")
+                    st.success(f"Analyzed {len(fixtures)} matches • Chose best market for each")
                     st.subheader(f"Safest Accumulator • Target ≈ {target_odds}")
                     
                     for i, p in enumerate(selected, 1):
@@ -142,7 +151,8 @@ if st.button("Generate Safest Accumulator"):
                             <b>{i}. {p['match']}</b><br>
                             <small>{p['league']}</small><br>
                             <span style="color:#00e676; font-weight:bold; font-size:15px;">{p['pick']}</span> 
-                            <span style="color:#ffffff;"> @ {p['odds']}</span>
+                            <span style="color:#ffffff;"> @ {p['odds']}</span><br>
+                            <small style="color:#888;">{p['reason']}</small>
                         </div>
                         """, unsafe_allow_html=True)
                     
