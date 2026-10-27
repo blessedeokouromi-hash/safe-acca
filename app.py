@@ -42,7 +42,7 @@ st.title("⚽ Safe Acca AI")
 st.markdown("### Real Predictions • Safest Accumulator")
 
 st.info(f"**Support the app** → [👉 Click here to Support / Unlock]({SMARTLINK})")
-st.caption("This version uses real API predictions (uses more of your daily limit)")
+st.caption("This version uses real API predictions")
 
 st.divider()
 
@@ -53,10 +53,10 @@ with col2:
     max_legs = st.number_input("📊 Max Legs", min_value=3, max_value=12, value=8)
 
 if st.button("Generate Safest Accumulator (Real Predictions)"):
-    with st.spinner("Fetching fixtures + real predictions (this takes longer)..."):
+    with st.spinner("Fetching fixtures + real predictions..."):
         today = datetime.utcnow().strftime("%Y-%m-%d")
         
-        # 1. Get fixtures
+        # Get fixtures
         fixtures_url = "https://v3.football.api-sports.io/fixtures"
         fixtures_res = requests.get(fixtures_url, headers=headers, params={"date": today}, timeout=20)
         fixtures_data = fixtures_res.json()
@@ -70,8 +70,7 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
             if not not_started:
                 st.warning("No upcoming matches found today.")
             else:
-                # Take only first 15 matches to save API requests
-                selected_fixtures = not_started[:15]
+                selected_fixtures = not_started[:14]  # limit to save requests
                 
                 predictions = []
                 
@@ -80,8 +79,9 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
                     home = f["teams"]["home"]["name"]
                     away = f["teams"]["away"]["name"]
                     league = f["league"]["name"]
+                    country = f["league"].get("country", "International")
                     
-                    # 2. Get prediction for this fixture
+                    # Get prediction
                     pred_url = f"https://v3.football.api-sports.io/predictions?fixture={fixture_id}"
                     pred_res = requests.get(pred_url, headers=headers, timeout=15)
                     
@@ -90,13 +90,13 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
                         if pred_data:
                             pred = pred_data[0]
                             percent = pred.get("predictions", {}).get("percent", {})
-                            advice = pred.get("predictions", {}).get("advice", "No advice")
+                            advice = pred.get("predictions", {}).get("advice", "")
                             
-                            home_pct = float(percent.get("home", "0").replace("%", ""))
-                            draw_pct = float(percent.get("draw", "0").replace("%", ""))
-                            away_pct = float(percent.get("away", "0").replace("%", ""))
+                            home_pct = float(percent.get("home", "0").replace("%", "") or 0)
+                            draw_pct = float(percent.get("draw", "0").replace("%", "") or 0)
+                            away_pct = float(percent.get("away", "0").replace("%", "") or 0)
                             
-                            # Choose best market based on highest probability
+                            # Choose best market
                             if home_pct >= 55:
                                 pick = "Home Win"
                                 odds = 1.40
@@ -105,28 +105,26 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
                                 pick = "Away Win"
                                 odds = 1.50
                                 conf = away_pct
-                            elif home_pct + draw_pct >= 70:
+                            elif home_pct + draw_pct >= 68:
                                 pick = "Double Chance 1X"
                                 odds = 1.25
                                 conf = home_pct + draw_pct
                             else:
                                 pick = "Over 1.5 Goals"
                                 odds = 1.30
-                                conf = 60
+                                conf = 58
                             
                             predictions.append({
                                 "match": f"{home} vs {away}",
-                                "league": league,
+                                "league": f"{country} - {league}",
                                 "pick": pick,
                                 "odds": odds,
                                 "confidence": conf,
                                 "advice": advice
                             })
                 
-                # Sort by confidence
                 predictions.sort(key=lambda x: x["confidence"], reverse=True)
                 
-                # Build accumulator
                 selected = []
                 total = 1.0
                 
@@ -139,19 +137,19 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
                         break
                 
                 if not selected:
-                    st.warning("Could not get enough predictions. Try again later.")
+                    st.warning("Could not get enough predictions.")
                 else:
-                    st.success(f"Used real predictions for {len(predictions)} matches")
+                    st.success(f"Used real predictions • {len(predictions)} matches analyzed")
                     st.subheader(f"Safest Accumulator • Target ≈ {target_odds}")
                     
                     for i, p in enumerate(selected, 1):
                         st.markdown(f"""
                         <div class="match-card">
                             <b>{i}. {p['match']}</b><br>
-                            <small>{p['league']}</small><br>
+                            <small style="color:#00e676;">{p['league']}</small><br>
                             <span style="color:#00e676; font-weight:bold;">{p['pick']}</span> 
                             <span style="color:#fff;"> @ {p['odds']}</span><br>
-                            <small>Confidence: {p['confidence']:.0f}% • {p['advice']}</small>
+                            <small>Confidence: {p['confidence']:.0f}%</small>
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -159,7 +157,7 @@ if st.button("Generate Safest Accumulator (Real Predictions)"):
                     st.markdown(f"**Legs:** {len(selected)}")
                     st.caption("⚠️ For entertainment only. Gamble responsibly. 18+")
                     
-        st.caption(f"Requests used this generation: \~{1 + len(selected_fixtures)}")
+        st.caption(f"Requests used this time: \~{1 + len(selected_fixtures)}")
 
 st.divider()
-st.caption("Free plan limit: 100 requests/day • This version uses more requests")
+st.caption("Free plan: 100 requests/day")
