@@ -3,18 +3,10 @@ import requests
 from datetime import datetime
 import os
 
-st.set_page_config(
-    page_title="Safe Acca AI",
-    page_icon="⚽",
-    layout="centered"
-)
+st.set_page_config(page_title="Safe Acca AI", page_icon="⚽", layout="centered")
 
-# Custom CSS for better look
 st.markdown("""
 <style>
-    .main {
-        background-color: #0e1117;
-    }
     .stButton>button {
         width: 100%;
         background-color: #00c853;
@@ -22,13 +14,22 @@ st.markdown("""
         font-weight: bold;
         border-radius: 10px;
         height: 50px;
+        font-size: 16px;
     }
     .match-card {
-        background-color: #1e2130;
-        padding: 15px;
+        background-color: #1c1f2e;
+        padding: 16px;
         border-radius: 12px;
-        margin-bottom: 12px;
-        border-left: 5px solid #00c853;
+        margin-bottom: 14px;
+        border-left: 6px solid #00c853;
+        color: #ffffff !important;
+    }
+    .match-card b {
+        color: #ffffff !important;
+        font-size: 16px;
+    }
+    .match-card small {
+        color: #b0b0b0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -38,11 +39,17 @@ headers = {"x-apisports-key": API_KEY}
 
 SMARTLINK = "https://asiafilm.org/4/bd80344d93bc26083f8b20a55302a626"
 
-st.title("⚽ Safe Acca AI")
-st.markdown("### Find the safest football accumulators for today")
+# Strong leagues get higher safety score
+TOP_LEAGUES = [
+    "Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1",
+    "UEFA Champions League", "UEFA Europa League", "Championship",
+    "Eredivisie", "Primeira Liga", "Belgian Pro League", "Scottish Premiership"
+]
 
-# Support section
-st.info(f"**Support the app** → [👉 Click here to unlock / support]({SMARTLINK})")
+st.title("⚽ Safe Acca AI")
+st.markdown("### Safest Football Accumulator for Today")
+
+st.info(f"**Support the app** → [👉 Click here to Support / Unlock]({SMARTLINK})")
 
 st.divider()
 
@@ -50,17 +57,10 @@ col1, col2 = st.columns(2)
 with col1:
     target_odds = st.number_input("🎯 Target Odds", min_value=10, max_value=3000, value=200, step=10)
 with col2:
-    max_legs = st.number_input("📊 Max Legs", min_value=3, max_value=20, value=10)
-
-st.markdown("### Preferred Markets")
-markets = st.multiselect(
-    "Select markets you want the AI to use:",
-    ["Home Win", "Away Win", "Over 1.5 Goals", "Under 3.5 Goals", "BTTS No", "Double Chance 1X"],
-    default=["Home Win", "Over 1.5 Goals", "BTTS No"]
-)
+    max_legs = st.number_input("📊 Max Legs", min_value=3, max_value=18, value=10)
 
 if st.button("Generate Safest Accumulator"):
-    with st.spinner("Analyzing today's matches across all leagues..."):
+    with st.spinner("Analyzing today's matches for safest picks..."):
         today = datetime.utcnow().strftime("%Y-%m-%d")
         url = "https://v3.football.api-sports.io/fixtures"
         params = {"date": today}
@@ -75,63 +75,65 @@ if st.button("Generate Safest Accumulator"):
                 fixtures = data.get("response", [])
                 
                 if not fixtures:
-                    st.warning("No matches found today or daily limit reached (100 requests).")
+                    st.warning("No matches found or daily limit reached.")
                 else:
-                    # Simple ranking + different markets
-                    picks = []
-                    market_list = markets if markets else ["Home Win"]
+                    scored_matches = []
                     
-                    for i, f in enumerate(fixtures):
-                        status = f["fixture"]["status"]["short"]
-                        if status not in ["NS", "TBD"]:
+                    for f in fixtures:
+                        if f["fixture"]["status"]["short"] not in ["NS", "TBD"]:
                             continue
                         
                         home = f["teams"]["home"]["name"]
                         away = f["teams"]["away"]["name"]
                         league = f["league"]["name"]
                         
-                        # Rotate markets for variety
-                        market = market_list[i % len(market_list)]
+                        # Safety score system
+                        safety = 40  # base score
                         
-                        if "Home" in market:
-                            pick = f"Home Win"
-                            odds = 1.45
-                        elif "Away" in market:
-                            pick = f"Away Win"
-                            odds = 1.55
-                        elif "Over 1.5" in market:
+                        # Bonus for top leagues
+                        for top in TOP_LEAGUES:
+                            if top.lower() in league.lower():
+                                safety += 30
+                                break
+                        
+                        # Prefer home teams
+                        safety += 15
+                        
+                        # Decide market based on safety
+                        if safety >= 70:
+                            pick = "Home Win"
+                            odds = 1.40
+                        elif safety >= 55:
                             pick = "Over 1.5 Goals"
                             odds = 1.30
-                        elif "Under 3.5" in market:
-                            pick = "Under 3.5 Goals"
-                            odds = 1.35
-                        elif "BTTS No" in market:
-                            pick = "BTTS - No"
-                            odds = 1.50
                         else:
-                            pick = "Double Chance 1X"
-                            odds = 1.25
+                            pick = "BTTS - No"
+                            odds = 1.55
                         
-                        picks.append({
+                        scored_matches.append({
                             "match": f"{home} vs {away}",
                             "league": league,
                             "pick": pick,
-                            "odds": odds
+                            "odds": odds,
+                            "safety": safety
                         })
                     
-                    # Build accumulator
+                    # Sort by highest safety first
+                    scored_matches.sort(key=lambda x: x["safety"], reverse=True)
+                    
+                    # Build the accumulator
                     selected = []
                     total = 1.0
                     
-                    for p in picks:
+                    for m in scored_matches:
                         if len(selected) >= max_legs:
                             break
-                        selected.append(p)
-                        total *= p["odds"]
+                        selected.append(m)
+                        total *= m["odds"]
                         if total >= target_odds:
                             break
                     
-                    st.success(f"Analyzed {len(fixtures)} matches today")
+                    st.success(f"Analyzed {len(fixtures)} matches • Selected safest ones")
                     st.subheader(f"Safest Accumulator • Target ≈ {target_odds}")
                     
                     for i, p in enumerate(selected, 1):
@@ -139,7 +141,8 @@ if st.button("Generate Safest Accumulator"):
                         <div class="match-card">
                             <b>{i}. {p['match']}</b><br>
                             <small>{p['league']}</small><br>
-                            <span style="color:#00c853; font-weight:bold;">{p['pick']}</span> @ {p['odds']}
+                            <span style="color:#00e676; font-weight:bold; font-size:15px;">{p['pick']}</span> 
+                            <span style="color:#ffffff;"> @ {p['odds']}</span>
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -148,7 +151,7 @@ if st.button("Generate Safest Accumulator"):
                     st.caption("⚠️ For entertainment only. Gamble responsibly. 18+")
                     
         except Exception as e:
-            st.error(f"Error occurred: {e}")
+            st.error(f"Error: {e}")
 
 st.divider()
-st.caption("Free plan limit: 100 API requests per day • App may stop when limit is reached")
+st.caption("Free plan: 100 requests/day • App may stop when limit is reached")
